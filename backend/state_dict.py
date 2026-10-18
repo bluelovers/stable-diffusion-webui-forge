@@ -122,8 +122,21 @@ def state_dict_prefix_replace(state_dict, replace_prefix, filter_keys=False):
 
 
 def detect_quantization(state_dict: dict[str, torch.Tensor], *, is_unet: bool = False) -> dict | None:
-    if any(k.endswith(".comfy_quant") for k in state_dict):
-        return {"mixed_ops": True, "TE": not is_unet}
+    count: dict[str, int] = {}
+
+    for key, val in state_dict.items():
+        if not key.endswith(".comfy_quant"):
+            continue
+
+        fmt: str = json.loads(val.numpy().tobytes())["format"]
+        count[fmt] = count.get(fmt, 0) + 1
+
+    if count:
+        from backend.quant_ops import QUANT_ALGOS
+
+        layout: str = QUANT_ALGOS[max(count, key=count.get)]["comfy_tensor_layout"]
+        return {"mixed_ops": True, "TE": not is_unet, "layout": layout}
+
     return None
 
 
