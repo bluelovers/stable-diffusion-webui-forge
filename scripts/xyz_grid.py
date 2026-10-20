@@ -92,20 +92,6 @@ def apply_order(p: StableDiffusionProcessing, x: list[str], _):
     p.prompt = prompt_tmp + p.prompt
 
 
-def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
-    if (info := modules.sd_models.get_closet_checkpoint_match(x)) is None:
-        raise ValueError(f'Unknown Checkpoint: "{x}"')
-
-    if info.name == p.override_settings.get("sd_model_checkpoint", None):
-        return
-
-    orig_ckpt = getattr(opts, "sd_model_checkpoint", None)
-
-    opts.set("sd_model_checkpoint", info.name)
-    refresh_loading_params_for_xyz_grid()
-    opts.set("sd_model_checkpoint", orig_ckpt)
-
-
 def apply_size(p: StableDiffusionProcessing, x: str, _):
     try:
         width, height = x.split("x")
@@ -115,8 +101,22 @@ def apply_size(p: StableDiffusionProcessing, x: str, _):
         logger.error(f'Invalid Size "{x}" for X/Y/Z Plot')
 
 
-def apply_vae(p: StableDiffusionProcessing, x: str, _):
+def apply_checkpoint(p: StableDiffusionProcessing, x: str, _):
+    p.override_settings["sd_model_checkpoint"] = modules.sd_models.get_closet_checkpoint_match(x).name
+
+
+def apply_vae_fast(p: StableDiffusionProcessing, x: str, _):
     p.override_settings["sd_vae"] = find_vae(x)
+
+
+def apply_vae(p: StableDiffusionProcessing, x: str, xs: list[str]):
+
+    def to_replace(v: str) -> bool:
+        return any(v.endswith(x) for x in xs)
+
+    modules: list[str] = [m for m in shared.opts.forge_additional_modules if not to_replace(m)]
+
+    p.override_settings["forge_additional_modules"] = modules + [find_vae(x)]
 
 
 def apply_styles(p: StableDiffusionProcessing, x: str, _):
@@ -211,14 +211,14 @@ def boolean_choice(reverse: bool = False):
 
 
 def format_value_add_label(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> str:
-    if type(x) == float:
+    if type(x) is float:
         x = round(x, 8)
 
     return f"{opt.label}: {x}"
 
 
 def format_value(p: StableDiffusionProcessing, opt: "AxisOption", x: T) -> T:
-    if type(x) == float:
+    if type(x) is float:
         x = round(x, 8)
     return x
 
@@ -292,20 +292,21 @@ axis_options = [
     AxisOption("Shift", float, apply_field("distilled_cfg_scale")),
     AxisOption("Rescale CFG", float, apply_field("rescale_cfg")),
     AxisOption("MaHiRo", str, apply_field("mahiro"), choices=boolean_choice(reverse=True)),
-    AxisOption("Prompt S/R", str, apply_prompt, format_value=format_value),
-    AxisOption("Prompt order", str_permutations, apply_order, format_value=format_value_join_list),
+    AxisOption("Prompt S/R", str, apply_prompt, cost=0.1, format_value=format_value),
+    AxisOption("Prompt order", str_permutations, apply_order, cost=0.1, format_value=format_value_join_list),
     AxisOptionTxt2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers if x.name not in opts.hide_samplers]),
     AxisOptionTxt2Img("Hires sampler", str, apply_field("hr_sampler_name"), confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOptionImg2Img("Sampler", str, apply_field("sampler_name"), format_value=format_value, confirm=confirm_samplers, choices=lambda: [x.name for x in sd_samplers.samplers_for_img2img if x.name not in opts.hide_samplers]),
     AxisOption("Schedule type", str, apply_field("scheduler"), choices=lambda: [x.label for x in sd_schedulers.schedulers]),
-    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=1.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
+    AxisOption("Checkpoint name", str, apply_checkpoint, format_value=format_remove_path, confirm=confirm_checkpoints, cost=2.0, choices=lambda: sorted(sd_models.checkpoints_list, key=str.casefold)),
     AxisOption("VAE", str, apply_vae, cost=0.7, choices=lambda: ["None", *sorted(sd_vae.vae_dict.keys())]),
+    AxisOption('VAE ("state_dict" only)', str, apply_vae_fast, cost=0.3, choices=lambda: ["None", *sorted(sd_vae.vae_dict.keys())]),
     AxisOption("Clip skip", int, apply_override("CLIP_stop_at_last_layers")),
     AxisOption("Denoising", float, apply_field("denoising_strength")),
     AxisOption("Initial noise multiplier", float, apply_field("initial_noise_multiplier")),
     AxisOption("Extra noise", float, apply_override("img2img_extra_noise")),
     AxisOptionTxt2Img("Hires upscaler", str, apply_field("hr_upscaler"), choices=lambda: [*shared.latent_upscale_modes, *[x.name for x in shared.sd_upscalers]]),
-    AxisOption("Styles", str, apply_styles, choices=lambda: list(shared.prompt_styles.styles)),
+    AxisOption("Styles", str, apply_styles, cost=0.1, choices=lambda: list(shared.prompt_styles.styles)),
     AxisOption("Face restore", str, apply_face_restore, format_value=format_value),
     AxisOption("Negative Guidance minimum sigma", float, apply_field("s_min_uncond")),
     AxisOption("Token merging ratio", float, apply_override("token_merging_ratio")),
@@ -332,7 +333,7 @@ if cmd_opts.adv_samplers:
             AxisOption("Beta schedule beta", float, apply_override("beta_dist_beta")),
             AxisOption("Eta", float, apply_field("eta")),
             AxisOptionImg2Img("Cond. Image Mask Weight", float, apply_field("inpainting_mask_weight")),
-            AxisOption("UniPC Order", int, apply_uni_pc_order, cost=0.5),
+            AxisOption("UniPC Order", int, apply_uni_pc_order),
             AxisOption("Always discard next-to-last sigma", str, apply_override("always_discard_next_to_last_sigma", boolean=True), choices=boolean_choice(reverse=True)),
             AxisOption("SGM noise multiplier", str, apply_override("sgm_noise_multiplier", boolean=True), choices=boolean_choice(reverse=True)),
         ]
@@ -477,7 +478,7 @@ class Script(scripts.Script):
         return "X/Y/Z plot"
 
     def ui(self, is_img2img):
-        self.current_axis_options = [x for x in axis_options if type(x) == AxisOption or x.is_img2img == is_img2img]
+        self.current_axis_options = [x for x in axis_options if type(x) is AxisOption or x.is_img2img == is_img2img]
 
         with gr.Group(elem_classes=["xyz_entries"]):
             with gr.Row():
@@ -630,7 +631,7 @@ class Script(scripts.Script):
             else:
                 valslist = csv_string_to_list_strip(vals)
 
-            if opt.type == int:
+            if opt.type is int:
                 valslist_ext = []
 
                 for val in valslist:
@@ -654,7 +655,7 @@ class Script(scripts.Script):
                         valslist_ext.append(val)
 
                 valslist = valslist_ext
-            elif opt.type == float:
+            elif opt.type is float:
                 valslist_ext = []
 
                 for val in valslist:
