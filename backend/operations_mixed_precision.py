@@ -438,7 +438,7 @@ def linear_input_act(linear: torch.nn.Linear, x: torch.Tensor, input_act: str, a
     full_precision_mm = getattr(linear, "_full_precision_mm", False)
 
     if not isinstance(weight, QuantizedTensor) or weight._layout_cls != "TensorWiseINT8Layout" or getattr(weight._params, "transposed", False) or full_precision_mm:
-        if not isinstance(weight, QuantizedTensor) and not full_precision_mm and _fp16_linear_wanted(x):
+        if not isinstance(weight, QuantizedTensor) and not full_precision_mm and _fp16_linear_wanted(x) and getattr(weight, "gguf_cls", None) is None:
             weight, bias, offload_stream = weights_manual_cast(linear, x)
             with main_stream_worker(weight, bias, offload_stream):
                 return ck.fp16_linear(_eager_input_act(x, input_act, act_weight, act_eps), weight, bias, residual=residual, residual_scale=residual_scale)
