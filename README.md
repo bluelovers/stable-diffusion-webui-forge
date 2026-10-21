@@ -27,6 +27,7 @@ The name "Forge" is inspired by "Minecraft Forge". This project aims to become t
 
 #### New Features
 
+- [X] Support [Moss-Image](https://huggingface.co/OpenMOSS-Team/MOSS-Image-SFT)
 - [X] Support [Qwen-Image-2.1](https://huggingface.co/Qwen/Qwen-Image-2.1)
 - [X] Support [Krea 2](https://huggingface.co/krea/Krea-2-Turbo)
 - [X] Support **Krea 2 Identity Edit**
