@@ -63,6 +63,7 @@ options_templates.update(
             "save_mask_composite": OptionInfo(False, "For inpainting, save the masked composite"),
             "jpeg_quality": OptionInfo(85, "JPEG Quality", gr.Slider, {"minimum": 1, "maximum": 100, "step": 1}),
             "webp_lossless": OptionInfo(False, "Lossless WebP"),
+            "alpha_threshold": OptionInfo(16, "Alpha Threshold", gr.Slider, {"minimum": 0, "maximum": 255, "step": 1}).info("alpha below this value is considered fully transparent"),
             "export_for_4chan": OptionInfo(True, "Save copies of large images as JPG").info("if the following limits are met"),
             "img_downscale_threshold": OptionInfo(4.0, "File Size limit for the above option", gr.Number).info("in MB"),
             "target_side_length": OptionInfo(4096, "Width/Height limit for the above option", gr.Number).info("in pixels"),
