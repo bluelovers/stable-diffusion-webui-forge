@@ -132,10 +132,26 @@ def load_network(name: str, network_on_disk: network.NetworkOnDisk):
     return net
 
 
-def load_networks(names: list[str], te_multipliers: list[float] = None, unet_multipliers: list[float] = None):
+def load_networks(names: list[str], te_multipliers: list[float] = None, unet_multipliers: list[float] = None, skip: dict[str, str] = None) -> dict[str, str]:
+    """載入指定名稱的 LoRA 並套用至當前模型。
+
+    回傳本批次新判定失敗的 {名稱: 原因};呼叫方應將其記憶於批次物件後,於同批次的後續輪次以 skip 傳回,
+    使 n_iter 每輪不再重複掃描目錄、重讀檔案與重複輸出錯誤。skip 與 names、兩個 multiplier 列表一一對應,
+    過濾時三者同步縮減。
+    """
+    failed: dict[str, str] = {}
+
+    if skip and names:
+        # 批次內已知失敗者:於任何磁碟 I/O(walk_files / list_available_networks)之前移除
+        keep = [i for i, name in enumerate(names) if name not in skip]
+        if len(keep) != len(names):
+            names = [names[i] for i in keep]
+            te_multipliers = [te_multipliers[i] for i in keep]
+            unet_multipliers = [unet_multipliers[i] for i in keep]
+
     current_sd = sd_models.model_data.get_sd_model()
     if current_sd is None:
-        return
+        return failed
 
     loaded_networks.clear()
 
@@ -160,8 +176,9 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
             net.mentioned_name = name
             network_on_disk.read_hash()
             loaded_networks.append(net)
-        except Exception:
+        except Exception as e:
             logger.error(f'Failed to load LoRA: "{name}"')
+            failed[name] = f"{type(e).__name__}: {e}"
             continue
 
     online_mode = dynamic_args.online_lora or False
@@ -174,7 +191,7 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
 
     compiled_lora_targets_hash = str(compiled_lora_targets)
     if current_sd.current_lora_hash == compiled_lora_targets_hash:
-        return
+        return failed
 
     current_sd.current_lora_hash = compiled_lora_targets_hash
     current_sd.forge_objects.unet = current_sd.forge_objects_original.unet
@@ -183,13 +200,29 @@ def load_networks(names: list[str], te_multipliers: list[float] = None, unet_mul
     if dynamic_args.nunchaku:
         current_sd.forge_objects.unet.model.diffusion_model.loras.clear()
 
+    # 讀檔失敗時以 filename 反查名稱;同一檔案可能被多個名稱(alias)引用,故收集為清單
+    names_by_file: dict[str, list[str]] = {}
+    for n, name in zip(networks_on_disk, names):
+        if n is not None:
+            names_by_file.setdefault(n.filename, []).append(name)
+
     for filename, strength_model, strength_clip, online_mode in compiled_lora_targets:
-        lora_sd = load_lora_state_dict(filename)
+        try:
+            lora_sd = load_lora_state_dict(filename)
+        except Exception as e:
+            # 只跳過該檔案本身,不中斷同一次呼叫內其餘 LoRA 的載入
+            logger.error(f'Failed to read LoRA file: "{filename}"')
+            reason = f"{type(e).__name__}: {e}"
+            for bad_name in names_by_file.get(filename, [filename]):
+                failed[bad_name] = reason
+            continue
         if any(key.startswith("lora_unet__") for key in lora_sd):
             lora_sd = state_dict_prefix_replace(lora_sd, {"lora_unet__": "lora_unet_"})
         current_sd.forge_objects.unet, current_sd.forge_objects.clip = load_lora_for_models(current_sd.forge_objects.unet, current_sd.forge_objects.clip, lora_sd, strength_model, strength_clip, filename=filename, online_mode=online_mode)
 
     current_sd.forge_objects_after_applying_lora = current_sd.forge_objects.shallow_copy()
+
+    return failed
 
 
 def process_network_files(names: Optional[list[str]] = None):
