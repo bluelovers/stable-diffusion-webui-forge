@@ -25,6 +25,14 @@ class ExtraNetworkLora(extra_networks.ExtraNetwork):
             p.all_prompts = [x + f"<lora:{additional}:{shared.opts.extra_networks_default_multiplier}>" for x in p.all_prompts]
             params_list.append(extra_networks.ExtraNetworkParams(items=[additional, shared.opts.extra_networks_default_multiplier]))
 
+        # 本批次已判定失敗的 LoRA:先過濾再載入,避免 n_iter 每輪重複掃描目錄與重讀檔案
+        failed: dict[str, str] = getattr(p, "lora_failed_names", None)
+        if failed is None:
+            failed = p.lora_failed_names = {}
+
+        if failed:
+            params_list = [x for x in params_list if not x.positional or x.positional[0] not in failed]
+
         names: list[str] = []
         te_multipliers: list[float] = []
         unet_multipliers: list[float] = []
@@ -43,7 +51,9 @@ class ExtraNetworkLora(extra_networks.ExtraNetwork):
             te_multipliers.append(te_multiplier)
             unet_multipliers.append(unet_multiplier)
 
-        networks.load_networks(names, te_multipliers, unet_multipliers)
+        new_failures = networks.load_networks(names, te_multipliers, unet_multipliers, skip=failed)
+        if new_failures:
+            failed.update(new_failures)
 
         if shared.opts.lora_add_hashes_to_infotext:
             if not getattr(p, "is_hr_pass", False) or not hasattr(p, "lora_hashes"):
@@ -60,3 +70,9 @@ class ExtraNetworkLora(extra_networks.ExtraNetwork):
         if self.errors:
             p.comment("Networks with errors: " + ", ".join(f"{k} ({v})" for k, v in self.errors.items()))
             self.errors.clear()
+
+        failed = getattr(p, "lora_failed_names", None)
+        if failed:
+            summary = ", ".join(f"{k} ({v})" for k, v in failed.items())
+            networks.logger.warning(f"Skipped LoRAs: {summary}")
+            p.comment("Skipped LoRAs: " + summary)
