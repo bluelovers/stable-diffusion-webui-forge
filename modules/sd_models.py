@@ -139,6 +139,13 @@ def list_models():
         checkpoint_info = CheckpointInfo(filename)
         checkpoint_info.register()
 
+    # model_list is a set, so registration order is arbitrary; rebuild checkpoints_list
+    # in case-insensitive title order so the dropdown and first-item fallback stay deterministic
+    sorted_titles = sorted(checkpoints_list, key=str.casefold)
+    ordered_checkpoints = {title: checkpoints_list[title] for title in sorted_titles}
+    checkpoints_list.clear()
+    checkpoints_list.update(ordered_checkpoints)
+
 
 re_strip_checksum = re.compile(r"\s*\[[^]]+]\s*$")
 
