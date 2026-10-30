@@ -583,6 +583,9 @@ def fp8_linear(self: torch.nn.Linear, input: torch.Tensor):
 class ForgeOperationsFP8(ForgeOperations):
     class Linear(ForgeOperations.Linear, ForgeWeights):
         def forward(self, x):
+            if len(self.weight_function) > 0 or len(self.bias_function) > 0:
+                return super().forward(x)
+
             try:
                 if (out := fp8_linear(self, x)) is not None:
                     return out
