@@ -4,6 +4,7 @@ import json
 
 import torch
 
+from backend.args import args
 from backend.memory_management import cast_to_device, logger
 from backend.operations import main_stream_worker, weights_manual_cast
 
@@ -129,7 +130,7 @@ def _load_quantized_module(module: torch.nn.Module, super_load, state_dict: dict
                 "scale": scale,
                 "convrot_groupsize": int(layer_conf.get("convrot_groupsize", params_conf.get("convrot_groupsize", 256))),
                 "quant_group_size": 64,
-                "linear_dtype": layer_conf.get("linear_dtype", params_conf.get("linear_dtype", "int4")),
+                "linear_dtype": "int8" if args.force_w4a8 else layer_conf.get("linear_dtype", params_conf.get("linear_dtype", "int4")),
             }
         elif module.quant_format in _GROUPED_INT8_FORMATS:
             bits = _GROUPED_INT8_FORMATS[module.quant_format]

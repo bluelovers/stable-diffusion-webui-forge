@@ -64,6 +64,7 @@ parser.add_argument("--use-ck-attention", action="store_true", help="use Comfy-K
 parser.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the PyTorch cross attention (override sageattention/flash_attn/xformers)")
 parser.add_argument("--force-xformers-vae", action="store_true", help="Force VAE to use xformers attention (meant to be used with --use-pytorch-cross-attention)")
 parser.add_argument("--force-upcast-attention", action="store_true", help="Always upcast to fp32 during attention")
+parser.add_argument("--force-w4a8", action="store_true", help="Always use w4a8 when loading convrot_w4a4 models")
 
 parser.add_argument("--sage", action="store_true", help="install sageattention")
 parser.add_argument("--flash", action="store_true", help="install flash_attn")
