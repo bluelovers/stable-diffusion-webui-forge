@@ -442,7 +442,7 @@ def load_huggingface_component(guess, component_name, lib_name, cls_name, repo_p
 
             unet_config = guess.unet_config.copy()
             state_dict_parameters = utils.calculate_parameters(state_dict)
-            quant_config = detect_quantization(state_dict, is_unet=True)
+            quant_config = "nunchaku" if guess.nunchaku else detect_quantization(state_dict, is_unet=True)
 
             override_dtype = backend.args.dynamic_args.forge_unet_storage_dtype
 
