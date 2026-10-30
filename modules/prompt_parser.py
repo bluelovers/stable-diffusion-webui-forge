@@ -319,24 +319,11 @@ def reconstruct_cond_batch(c: list[list[ScheduledPromptConditioning]], current_s
 def stack_conds(tensors: list[torch.Tensor]) -> torch.Tensor:
     try:
         return torch.stack(tensors)
-    except Exception:
-        # handle prompts with different lengths (e.g. LLM)
+    except RuntimeError:
+        import math
 
-        token_count: int = max([x.shape[0] for x in tensors])
-        new_tensors: list[torch.Tensor] = []
-
-        for x in tensors:
-            if x.shape[0] == token_count:
-                new_tensors.append(x)
-            else:
-                diff = token_count - x.shape[0]
-                last_vector = x[-1:]
-                repeats = [diff] + [1] * (x.dim() - 1)
-                last_vector_repeated = last_vector.repeat(repeats)
-                x_padded = torch.cat([x, last_vector_repeated], dim=0)
-                new_tensors.append(x_padded)
-
-        return torch.stack(new_tensors)
+        token_count = math.lcm(*(x.shape[0] for x in tensors))
+        return torch.stack([x.repeat(token_count // x.shape[0], *([1] * (x.dim() - 1))) for x in tensors])
 
 
 def reconstruct_multicond_batch(c: MulticondLearnedConditioning, current_step: int):
